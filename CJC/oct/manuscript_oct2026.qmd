@@ -1,0 +1,581 @@
+---
+title: "Revisiting P2Y12 Inhibitors After Acute Coronary Syndromes - Additional Insights from a Bayesian Network Meta-Analysis"
+params:
+  root: "../.."
+format:
+  html:
+    toc: false
+    number-sections: false
+    embed-resources: true
+    theme: cosmo
+    fig-width: 8
+    fig-height: 6
+  pdf:
+    toc: false
+    number-sections: false
+    geometry: margin=2.5cm
+    fontsize: 11pt
+    linestretch: 1.5
+    latex-engine: xelatex
+    fig-pos: "H"
+    header-includes: |
+      \usepackage{booktabs}
+      \usepackage{longtable}
+      \usepackage{float}
+  docx:
+    toc: false
+    number-sections: false
+    reference-doc: reference_cjc.docx   # 1.5 line spacing, page numbers bottom right
+    fig-width: 7
+    fig-height: 5
+execute:
+  echo: false
+  warning: false
+  message: false
+bibliography: references_oct.bib
+csl: vancouver.csl
+link-citations: true
+---
+
+```{r setup}
+#| include: false
+# -----------------------------------------------------------------------------
+# All numbers in this manuscript are read from the CSV files written by
+# dapt_bayesian_nma_oct2026.R (outputs/tables/oct). Re-run that script first,
+# then render this file:  quarto render manuscript_oct2026.qmd
+# -----------------------------------------------------------------------------
+suppressPackageStartupMessages({
+  library(dplyr); library(tidyr); library(readr); library(stringr)
+  library(ggplot2); library(glue); library(knitr); library(scales)
+})
+
+root <- params$root
+tdir <- file.path(root, "outputs", "tables", "oct")
+rd   <- function(f) read_csv(file.path(tdir, f), show_col_types = FALSE)
+
+main  <- rd("02_main_results_raw.csv") |>
+  mutate(out = if_else(str_detect(outcome, "MACE"), "MACE", "Bleed"))
+sa    <- rd("03_sensitivity_raw.csv")
+sa9b  <- rd("03b_sensitivity_bleed_sa9.csv")
+tau   <- rd("04_heterogeneity.csv")
+loo   <- rd("06_loo.csv")
+ns    <- rd("07_nodesplit_PT.csv")
+conv  <- rd("08_convergence.csv")
+fe    <- rd("02b_fe_results.csv")
+inp_m <- rd("00_input_mace.csv")
+inp_b <- rd("00_input_bleed.csv")
+ssc   <- rd("00_switch_effective_counts.csv")
+
+# ---- formatting helpers ------------------------------------------------------
+f2  <- function(x) formatC(x, format = "f", digits = 2)
+pc  <- function(x) paste0(round(100 * x), "%")
+cm  <- function(x) formatC(x, format = "d", big.mark = ",")
+row <- function(o, comp, df = main) df |> filter(out == o, comparison == comp)
+sar <- function(lbl, comp) sa |> filter(outcome == lbl, comparison == comp)
+# "0.87 (95% CrI 0.77–1.01)"
+hr  <- function(r) glue("{f2(r$median_HR)} (95% CrI {f2(r$lo95_HR)}–{f2(r$hi95_HR)})")
+# "0.87 (0.77–1.01)"
+hrs <- function(r) glue("{f2(r$median_HR)} ({f2(r$lo95_HR)}–{f2(r$hi95_HR)})")
+
+M <- list(TC = row("MACE", "T vs C"), PC = row("MACE", "P vs C"),
+          PT = row("MACE", "P vs T"))
+B <- list(TC = row("Bleed", "T vs C"), PC = row("Bleed", "P vs C"),
+          PT = row("Bleed", "P vs T"))
+S9  <- list(PT = sar("SA9: SWITCH-SWEDEHEART crude counts", "P vs T"))
+S9b <- list(PT = sa9b |> filter(comparison == "P vs T"),
+            TC = sa9b |> filter(comparison == "T vs C"))
+S8  <- list(PT = sar("SA8: excl. SWITCH-SWEDEHEART", "P vs T"))
+S2  <- list(PC = sar("SA2: PCI-only", "P vs C"))
+
+sa_rng <- sa |>
+  filter(outcome != "Primary (cloglog RE)") |>
+  group_by(comparison) |>
+  summarise(lo = min(median_HR), hi = max(median_HR), .groups = "drop")
+rng <- function(comp) {
+  r <- filter(sa_rng, comparison == comp)
+  glue("{f2(r$lo)} to {f2(r$hi)}")
+}
+
+tauT_m <- filter(tau, Outcome == "MACE", Parameter == "T")
+tauT_b <- filter(tau, Outcome == "Major Bleeding", Parameter == "T")
+fe_row <- filter(loo, model != loo$model[which.max(loo$elpd_diff)])
+FE <- list(TC = filter(fe, comparison == "T vs C"),
+           PC = filter(fe, comparison == "P vs C"),
+           PT = filter(fe, comparison == "P vs T"))
+ns_dir <- filter(ns, estimate == "direct")
+ns_ind <- filter(ns, estimate == "indirect")
+ns_rat <- filter(ns, estimate == "ratio_direct_indirect")
+
+ss_m <- filter(ssc, outcome == "MACE"); ss_b <- filter(ssc, outcome == "Bleeding")
+
+# ---- network size -----------------------------------------------------------
+K     <- n_distinct(inp_m$study)
+N_pat <- sum(inp_m$n)
+ours_only <- c("TREAT", "Gasecka", "He", "Mohareb", "Wu", "TC4",
+               "TRILOGY ACS", "Yabe", "REDUCE-MVI", "SWITCH-SWEDEHEART")
+N_ours_only <- sum(inp_m$n[inp_m$study %in% ours_only])
+N_PT <- sum(inp_m$n[inp_m$study %in% c("PRAGUE-18", "ISAR-REACT 5",
+                                        "REDUCE-MVI", "TUXEDO-2",
+                                        "SWITCH-SWEDEHEART")])
+
+# Illustrative absolute effects, prasugrel vs clopidogrel (per 100 pt-years)
+abs_mace  <- 10 * (1 - M$PC$median_HR)       # baseline MACE 10%/yr
+abs_bl3   <- 3  * (B$PC$median_HR - 1)       # baseline bleeding 3%/yr
+abs_bl8   <- 8  * (B$PC$median_HR - 1)       # high bleeding risk 8%/yr
+
+fig_dir <- "figures"
+dir.create(fig_dir, showWarnings = FALSE)
+```
+
+```{r abstract-text}
+#| include: false
+abstract <- glue(
+"**Background:** The optimal dual antiplatelet therapy (DAPT) after acute coronary syndrome (ACS) is debated. A recent frequentist network meta-analysis (NMA) concluded that prasugrel provides the optimal efficacy–safety balance. We updated our previous Bayesian NMA to assess how firmly the evidence supports any treatment hierarchy and to include the most recent trial evidence.
+
+**Methods:** We included low risk-of-bias randomized trials comparing clopidogrel, ticagrelor and prasugrel, each with aspirin, in ACS with at least 6 months of follow-up. Outcomes were major adverse cardiovascular events (MACE: death, myocardial infarction, stroke) and major bleeding. A Bayesian random-effects NMA with a complementary log-log link and follow-up offset estimated hazard ratios (HR) and probabilities of clinically meaningful benefit (HR <0.90), practical equivalence (0.90–1.11) and harm (HR >1.11). The stepped-wedge SWITCH-SWEDEHEART trial was included with its cluster- and time-adjusted estimate.
+
+**Results:** {K} trials ({cm(N_pat)} patients) were included. For MACE, prasugrel versus clopidogrel had HR {hrs(M$PC)} and a {pc(M$PC$pr_clin_benefit)} probability of meaningful benefit; prasugrel versus ticagrelor HR {hrs(M$PT)}, with {pc(M$PT$pr_clin_benefit)} probability of clinically meaningful benefit; ticagrelor versus clopidogrel HR {hrs(M$TC)}, with {pc(M$TC$pr_rope)} probability of clinical equivalence. For bleeding, ticagrelor versus clopidogrel had HR {hrs(B$TC)} ({pc(B$TC$pr_clin_harm)} probability of meaningful harm); for prasugrel versus clopidogrel this probability was {pc(B$PC$pr_clin_harm)}. Results were robust across nine sensitivity analyses.
+
+**Conclusions:** The evidence does not support a definitive hierarchy for DAPT. Prasugrel has the strongest efficacy signal; ticagrelor offers little MACE benefit over clopidogrel with probable excess bleeding. Clopidogrel remains a reasonable choice, particularly for patients at high bleeding risk.")
+
+abstract_words <- str_count(str_remove_all(abstract, "\\*\\*[^*]+\\*\\*"), "\\S+")
+
+# Approximate main-text word count (Introduction to end of Conclusions)
+src  <- readLines("manuscript_oct2026.qmd", warn = FALSE)
+body <- src[(grep("^# Introduction", src)[1]):(grep("^# Funding", src)[1] - 1)]
+body <- paste(body, collapse = "\n") |>
+  str_remove_all("(?s)```\\{r.*?```") |>
+  str_replace_all("`r [^`]+`", "X") |>
+  str_remove_all("\\[@[^\\]]+\\]") |>
+  str_remove_all("(?m)^#+ ")
+main_words <- str_count(body, "\\S+")
+```
+
+**Short title:** Bayesian NMA of P2Y12 Inhibitors After ACS
+
+**Authors:** Stephen A. Kutcher MSc PhD^1^, Nandini Dendukuri PhD^2,3^, Sonny Dandona MD^2^, James M. Brophy MD PhD^2,3^
+
+ ^1^ Clinical Research Unit, Children's Hospital Eastern Ontario; ^2^ Centre for Health Outcomes Research (CORE), Research Institute of the McGill University Health Centre, Montreal, Quebec, Canada; ^3^ Department of Epidemiology, Biostatistics and Occupational Health, McGill University, Montreal, Quebec, Canada; ^4^ [affiliation].
+
+**Address for correspondence:** James M. Brophy  Research Institute of McGill University Health Centre, Centre for Health Outcomes Research (CORE), 5252 Boul. de Maisonneuve West, Room 2B.37, Montreal QC H4A 3S5. Email: james.brophy@mcgill.ca
+
+**Word count:** approximately `r cm(round(main_words, -1))` words (main text, excluding title page, abstract, references, tables and figure legends). **Abstract:** `r abstract_words` words. **Tables:** 4. **Figures:** 2.
+
+{{< pagebreak >}}
+
+# Abstract
+
+```{r abstract-out}
+#| results: asis
+cat(abstract)
+```
+
+{{< pagebreak >}}
+
+# Introduction
+
+Dual antiplatelet therapy (DAPT), aspirin combined with an oral P2Y12 inhibitor, is the cornerstone of secondary prevention after an acute coronary syndrome (ACS). Three oral P2Y12 inhibitors are available: clopidogrel, ticagrelor and prasugrel. European, American and Canadian guidelines favour the more potent agents, ticagrelor or prasugrel, over clopidogrel [@esc; @circ; @ccs2023], and the 2023 European guideline goes further in preferring prasugrel over ticagrelor, largely on the basis of the ISAR-REACT 5 trial [@esc; @isarreact5].
+
+A recent frequentist network meta-analysis (NMA) of 15 randomized clinical trials (RCTs; n = 48,904) has reinforced this opinion [@RN1]. Using random-effects odds ratios (OR) and rankings based on the surface under the cumulative ranking curve (SUCRA), it reported fewer major adverse cardiovascular events (MACE) with prasugrel than with clopidogrel (OR 0.80, 95% CI 0.69–0.93) or ticagrelor (OR 0.83, 95% CI 0.70–0.98), no MACE reduction with ticagrelor compared with clopidogrel, and more major bleeding with ticagrelor than with clopidogrel (OR 1.24, 95% CI 1.01–1.52). It concluded that "prasugrel provided the optimal balance for efficacy and safety" [@RN1]. That analysis, however, also included trials of elective PCI [@alpheus2020; @prasfitelective], trials with only 1 to 3 months of follow-up [@alpheus2020; @disperse2], and two trials with risk-of-bias concerns [@tang2016; @wang2016].
+
+We revisit the superiority of the available DAPT regimens by updating our 2023 Bayesian NMA [@BNMA2023] (17 trials, n = 57,814) with three trials published since. TC4 [@cmaj] is the first dedicated North American RCT comparing ticagrelor and clopidogrel (n = 1,005). TUXEDO-2 [@Tux] is a head-to-head comparison of prasugrel and ticagrelor in diabetic patients with multivessel disease (n = 1,800). The recently published SWITCH-SWEDEHEART [@switch2026] is a pragmatic trial of prasugrel and ticagrelor (n = 17,095). TC4 and SWITCH-SWEDEHEART were not included in the most recent NMA [@RN1].
+
+The Bayesian approach also offers statistical and interpretative advantages. Statistical significance and SUCRA rankings do not tell clinicians how likely it is that one drug is *meaningfully* better than another. By producing full posterior probability distributions, a Bayesian analysis can answer this directly, estimating the probability that a treatment difference exceeds a clinically meaningful threshold or falls within a region of practical equivalence (ROPE), and thereby help distinguishing statistical from clinical significance. Bayesian methods also allow more complex models including placing trials with different follow-up durations on a common scale.
+
+We have therefore performed an updated systematic review of our Bayesian NMA[@BNMA2023] including new trials, totalling 19,900 patients [@cmaj; @Tux; @switch2026], and contrasted our findings with those of the recent frequentist NMA[@RN1].
+
+# Methods
+
+## Eligibility, search and selection
+
+This review follows the PRISMA extension for network meta-analyses [@RN28]. The original search [@BNMA2023] covered MEDLINE, EMBASE, the Cochrane Central Register of Controlled Trials and ClinicalTrials.gov up to August 1, 2022, supplemented by hand-searching of reference lists. ACS terms (acute coronary syndrome, myocardial infarction, myocardial ischaemia, unstable angina, STEMI, NSTEMI) were combined with DAPT terms or with pairwise combinations of clopidogrel, prasugrel and ticagrelor, together with filters for RCTs, and publications in English or French were eligible. The search was updated to October 19 2026 using the same strategy. The update identified three new eligible trials: TC4, TUXEDO-2 and SWITCH-SWEDEHEART. The full search strategy is provided in Supplemental Appendix S1, and the PRISMA flow diagram in Supplemental Figure S1.
+
+Eligible trials enrolled adults with ACS, with or without PCI, and randomized them to at least two of clopidogrel (C), ticagrelor (T) or prasugrel (P). In all eligible trials the P2Y12 inhibitor was given as part of DAPT with aspirin, so the comparisons are between DAPT regimens. Trials of aspirin-free strategies, in which a P2Y12 inhibitor was continued as monotherapy after early aspirin withdrawal (e.g., TWILIGHT, TICO, STOPDAPT-2 ACS and NEO-MINDSET [@twilight2019; @tico2020; @stopdapt2acs2022; @neomindset2025]), address a different question and were not eligible. Trials also had to have at least 6 months of planned follow-up and to report MACE. Trials of patients undergoing elective PCI for chronic coronary syndromes were not eligible.
+
+Risk of bias was assessed with the Cochrane RoB 2 tool [@rob2] across its five domains, using the cluster-randomized variant for TC4 and SWITCH-SWEDEHEART. As in our original review, only trials judged at low risk of bias in all domains were included in the primary analysis. The one exception was SWITCH-SWEDEHEART, which was judged to have some concerns in the randomization domain solely because of its cluster design, with only three randomized clusters. Given no other concerns, its contemporary relevance and its size, it was retained, and its influence was examined in sensitivity analyses that excluded it (SA8) or entered its crude counts (SA9). TC4 also used cluster randomization, but its cluster sequence was randomly generated, and it was judged at low risk of bias [@cmaj]. Trial-level judgments are shown in Supplemental Figure S2 (Supplemental Appendix S2). Arm-level event counts, follow-up duration and the proportion of patients undergoing PCI were extracted from the primary publications independently in duplicate.
+
+## Outcomes
+
+The primary efficacy outcome was MACE, defined as the composite of all-cause death, non-fatal myocardial infarction and non-fatal stroke. This "hard" composite minimizes heterogeneity in outcome definitions across trials [@BNMA2023], and it sometimes differs from a trial's own primary end point; in TUXEDO-2, for example, it was a secondary end point [@Tux]. The primary safety outcome was major bleeding, as defined by each trial.
+
+## Incorporating the stepped-wedge SWITCH-SWEDEHEART trial
+
+SWITCH-SWEDEHEART randomized seven Swedish regions, grouped into three clusters, to the order in which they switched from a default ticagrelor policy to a default prasugrel policy over four 9-month periods [@switch2026]. In this design every cluster begins on ticagrelor and ends on prasugrel, so policy is confounded with calendar time, and outcomes are correlated within regions. The crude arm-level counts (MACE 1113/9444 vs 848/7651; OR 0.93, 95% CI 0.85–1.03) therefore do not provide a valid randomized contrast. They are biased by secular trends and overstate the trial's precision. We instead used the trial's prespecified primary estimate, which adjusts for cluster, calendar time and baseline covariates: OR 0.90 (95% CI 0.77–1.06) for MACE and OR 0.80 (95% CI 0.64–0.99) for major bleeding [@switch2026].
+
+Because our model is arm-based, these adjusted estimates were converted into integer "effective counts", generalizing the effective-sample-size approach recommended for cluster-randomized trials [@cochrane23]. The observed ticagrelor-arm risk was retained, the prasugrel-arm risk was set so that the OR equalled the adjusted OR, and both arms were scaled by a common factor, preserving the allocation ratio, until the binomial standard error of the log-OR matched the standard error implied by the published confidence interval. The scaling factor is the empirical design effect, the ratio of the adjusted to the unadjusted sampling variance: `r f2(ss_m$design_effect)` for MACE and `r f2(ss_b$design_effect)` for bleeding. Unlike the conventional intraclass correlation coefficient (ICC), this method captures every source of lost precision in the trial's own analysis, namely clustering, separation of policy from calendar time, and covariate adjustment. The resulting counts were `r ss_m$r0`/`r cm(ss_m$n0)` (ticagrelor) and `r ss_m$r1`/`r cm(ss_m$n1)` (prasugrel) for MACE, and `r ss_b$r0`/`r cm(ss_b$n0)` and `r ss_b$r1`/`r cm(ss_b$n1)` for bleeding, reproducing the published adjusted estimates almost exactly (Supplemental Appendix S4, Supplemental Table S1). A sensitivity analysis (SA9) replaced the effective counts with the crude counts. TC4 was a time-cluster randomized trial in which cluster effects were negligible, and its counts were entered as reported [@cmaj].
+
+## Statistical model
+
+For study *i*, arm *j*, with *n~ij~* patients and follow-up *t~i~* years, events *r~ij~* were modelled as     
+$$r_{ij} \sim \text{Binomial}(n_{ij}, \pi_{ij})$$
+with a complementary log-log (cloglog) link:
+
+$$\text{cloglog}(\pi_{ij}) = \mu_i + \beta_j + u_{ij} + \log(t_i), \qquad (u_{iT}, u_{iP}) \sim \text{Multivariate Normal}(\mathbf{0}, \boldsymbol{\Sigma})$$
+
+Here $\mu_i$ is the study-specific baseline log-hazard for clopidogrel. $\beta_j$ is the population-average log hazard ratio (HR) for ticagrelor or prasugrel versus clopidogrel. $u_{ij}$ are study-specific deviations from these average effects. $\boldsymbol{\Sigma}$ is their $2 \times 2$ between-study covariance matrix: its diagonal elements, $\tau_T^2$ and $\tau_P^2$, are the between-study variances (heterogeneity) of the ticagrelor and prasugrel effects, and its off-diagonal element, $\rho\,\tau_T\tau_P$, allows the two deviations to be correlated within a trial, with the correlation $\rho$ estimated from the data (LKJ(1) prior, uniform over all valid correlations). The offset $\log(t_i)$, whose coefficient is fixed at 1, places trials with 6 to 30 months of follow-up on a common annualised hazard scale. Because the cloglog link arises from the proportional hazards model, differences in the linear predictor are log HRs rather than log ORs, which matters when event rates exceed about 10% or follow-up varies, as both do here. Prasugrel versus ticagrelor was obtained as $\exp(\beta_P - \beta_T)$, so all three comparisons share a single, internally consistent posterior.
+
+Priors were weakly informative: normal(-2, 1) for $\mu_i$ (corresponding to annual event rates of about 1–30%); normal(0, 0.5) for $\beta_j$ (95% prior mass on HR 0.37–2.70, encoding no preference between drugs); and half-normal(0, 0.5) for the between-study standard deviations $\tau_T$ and $\tau_P$ (prior mean 0.40 on the log-HR scale, at the conservative end of empirical cardiovascular estimates [@turner2012]). Their implications and derivation are detailed in Supplemental Appendix S3.
+
+Any definition of clinical relevance is obviously somewhat arbitrary but we defined a region of practical equivalence (ROPE) as a HR 0.90–1.11. An HR below 0.90 denotes clinically meaningful benefit, an HR above 1.11 clinically meaningful harm, and values in between practical equivalence. These thresholds match our previous work [@BNMA2023; @cmaj] and lie below the effect sizes most cardiovascular trials are powered to detect. Because they are applied to the posterior distributions after model fitting, readers may freely substitute their own thresholds.
+
+## Workflow, sensitivity analyses and software
+
+We followed a formal Bayesian workflow [@gelman2020; @kruschke2021]. Specifically, we performed (1) prior predictive checks to confirm they imply plausible event rates (2) data simulation with parameter recovery to verify the inference machinery correctly recovers known true parameters; (3) model fitting with
+convergence diagnostics; (4) posterior predictive checks to assess calibration of fitted models; (5) leave-one-out cross-validation (LOO-CV) for model comparison between random and fixed effects specifications; and (6) nine multiple prespecified sensitivity analyses (fully documented in Supplemental Appendix S5)      
+- SA1: a logit model without time offset;     
+- SA2: PCI-only trials (excluding TREAT and TRILOGY ACS);    
+- SA3: exclusion of TC4 (cluster randomization);      
+- SA4: exclusion of TUXEDO-2 (diabetic, multivessel population);     
+- SA5: exclusion of PRAGUE-18 (39% crossover);      
+- SA6 and SA7: tighter (half-normal(0, 0.25)) and wider (half-normal(0, 1)) heterogeneity priors;     
+- SA8: exclusion of SWITCH-SWEDEHEART (stepped wedge and cluster randomization);     
+- SA9: SWITCH-SWEDEHEART entered with crude counts            
+
+This workflow is consistent with the Bayesian analysis reporting guidelines[@kruschke2021], endorsed by the EQUATOR network.
+
+Consistency of the prasugrel versus ticagrelor comparison was assessed by comparing direct evidence (the five head-to-head trials) with indirect evidence from the clopidogrel-controlled trials alone. Models were fitted in R [@R] with brms [@brms] and Stan [@Stan2024] via cmdstanr [@cmdstanr], using four chains of 4,000 iterations (2,000 warm-up). Results are reported as posterior medians with 95% credible intervals (CrI). Code and data are available at https://github.com/brophyj/Bayesian-NMA.
+
+# Results
+
+## Trial Selection and Reconciliation
+
+The primary analysis included `r K` trials with `r cm(N_pat)` randomized patients (@fig-network; @tbl-recon). The network is fully connected: 10 ticagrelor–clopidogrel trials, 5 prasugrel–clopidogrel trials and 5 prasugrel–ticagrelor trials (`r cm(N_PT)` patients in the last group). Trial-level MACE and bleeding data are shown in @tbl-mace and @tbl-bleed.
+
+Interestingly, only 10 trials were common to our analysis and the previous NMA [@RN1] (@tbl-recon), and even for these the data used could differ. For PRAGUE-18, we used the 1-year outcomes [@prague18] rather than the 1-month outcomes[@prague18a] used previously. Ten trials (`r cm(N_ours_only)` patients) were included here but not in the previous NMA[@RN1]:
+
+- SWITCH-SWEDEHEART, published after their search [@switch2026];
+- TC4, published before their search but not included, with no reason given [@cmaj];
+- TREAT and TRILOGY ACS, which included non-PCI ACS patients and are excluded in SA2 [@treat2019; @trilogyacs2012];
+- REDUCE-MVI, Gasecka, He, Mohareb, Wu and Yabe, smaller ACS trials [@reducemvi2020; @Gasecka; @he2021; @mohareb2020; @Wu; @yabe2022].
+
+Conversely, five trials in the previous NMA[@RN1] didn't meet our eligibility criteria:
+
+- two with high risk of bias  [@tang2016; @wang2016];
+- An elective PCI study with 1-month follow-up [@alpheus2020];
+- An elective PCI in stable coronary disease [@prasfitelective];
+- A phase II dose-finding trial with 3-month follow-up [@disperse2].
+
+## Main results
+
+The primary random-effects results are summarized in @tbl-main and @fig-forest.
+
+For MACE, prasugrel had the strongest efficacy signal. Compared with clopidogrel, the HR was `r hr(M$PC)`, with a `r pc(M$PC$pr_clin_benefit)` probability of clinically meaningful benefit and a `r pc(M$PC$pr_rope)` probability of practical equivalence. Compared with ticagrelor, the HR was `r hr(M$PT)`, and the posterior distribution was split almost evenly between meaningful benefit (`r pc(M$PT$pr_clin_benefit)`) and practical equivalence (`r pc(M$PT$pr_rope)`). Ticagrelor versus clopidogrel had an HR of `r hr(M$TC)`, with `r pc(M$TC$pr_rope)` of the posterior inside the ROPE. Practical equivalence is therefore the most probable conclusion for this comparison.
+
+The clearest safety signal was excess bleeding with ticagrelor compared with clopidogrel: HR `r hr(B$TC)`, with a `r pc(B$TC$pr_clin_harm)` probability of meaningful harm (HR > 1.1). Prasugrel versus clopidogrel had an HR of `r hr(B$PC)`, with the posterior divided between meaningful harm (`r pc(B$PC$pr_clin_harm)`) and equivalence (`r pc(B$PC$pr_rope)`). Prasugrel had less bleeding than ticagrelor: HR `r hr(B$PT)`, with a `r pc(B$PT$pr_clin_benefit)` probability of meaningfully lower bleeding.
+
+All models converged (maximum $\hat{R}$ `r formatC(max(conv$rhat_max), format = "f", digits = 3)`, `r sum(conv$divergences)` divergent transitions). Between-study heterogeneity was clinically relevant: for ticagrelor versus clopidogrel, $\tau$ was `r f2(tauT_m$Median)` (95% CrI `r f2(tauT_m$lo95)`–`r f2(tauT_m$hi95)`) for MACE and `r f2(tauT_b$Median)` (`r f2(tauT_b$lo95)`–`r f2(tauT_b$hi95)`) for bleeding. The random-effects model was preferred to the fixed-effect model by LOO-CV (elpd difference `r formatC(fe_row$elpd_diff, format = "f", digits = 1)`, SE `r formatC(fe_row$se_diff, format = "f", digits = 1)`).
+
+## Sensitivity and consistency analyses
+
+Results were robust across all nine sensitivity analyses (Supplemental Appendix S5, Supplemental Tables S2 and S3, Supplemental Figure S4). Posterior median HRs for MACE ranged from `r rng("T vs C")` for ticagrelor versus clopidogrel, `r rng("P vs C")` for prasugrel versus clopidogrel, and `r rng("P vs T")` for prasugrel versus ticagrelor. The largest change came with restriction to PCI trials (SA2), where the probability of meaningful MACE benefit of prasugrel over clopidogrel rose to `r pc(S2$PC$pr_clin_benefit)`.
+
+Excluding SWITCH-SWEDEHEART (SA8) gave prasugrel versus ticagrelor MACE HR `r hrs(S8$PT)`. Using its crude counts (SA9) gave `r hrs(S9$PT)` for MACE, but changed the bleeding comparison more: prasugrel versus ticagrelor bleeding HR `r hrs(S9b$PT)`, with the probability of meaningfully lower bleeding falling to `r pc(S9b$PT$pr_clin_benefit)`.
+
+For prasugrel versus ticagrelor MACE, direct evidence gave HR `r hrs(ns_dir)` and indirect evidence `r hrs(ns_ind)`. The ratio of direct to indirect HRs was `r hrs(ns_rat)`, providing no evidence of important inconsistency.
+
+# Discussion
+
+Integrating `r K` RCTs and `r cm(N_pat)` patients, and propagating all quantifiable uncertainty, our analysis does not support a definitive hierarchy of P2Y12 inhibitors after ACS (Central Illustration). Prasugrel has the strongest efficacy signal, but whether its advantage over ticagrelor is clinically meaningful remains roughly a coin toss. Ticagrelor and clopidogrel are probably equivalent for MACE, while ticagrelor probably causes more bleeding. These findings differ from previous categorical conclusions[@RN1] for two broad reasons: the evidence base and the inferential framework.
+
+## A different evidence base
+
+Our network shares only two-thirds of the most recent NMA[@RN1] and adds ten others, including two very informative recent trials. SWITCH-SWEDEHEART is a pragmatic comparison of default prasugrel and default ticagrelor policies in an unselected, older Swedish population (mean age 70 years; 37% aged 75 years or older). It found no clear MACE difference and less major bleeding with prasugrel [@switch2026]. Because it is a policy driven trial with substantial use of clopidogrel in both groups, it probably underestimates any pharmacological difference between the drugs. Even so, it is the best available evidence on what a prasugrel-first strategy may achieve in routine practice. TC4, the only dedicated North American comparison of ticagrelor with clopidogrel, found near-equivalence [@cmaj], consistent with the PLATO North American subgroup [@plato2009]. Conversely, we excluded trials at higher risk of bias and trials of elective PCI or very short follow-up. Their inclusion mixes populations and time horizons that the previous NMA[@RN1], using unadjusted ORs, could not place on a common scale. That analysis also used 1-month PRAGUE-18 outcomes and by 1 year, when 39% of patients had crossed over to clopidogrel, the prasugrel advantage was likely attenuated [@prague18]. Using 1-year data is more appropriate for a meta-analysis focusing on 12-month treatment comparisons.
+
+## What the Bayesian approach adds
+
+**First, uncertainty is acknowledged and fully propagated.** Uncertainty in between-study heterogeneity, which is substantial here, flows into every comparison, including the indirect paths through clopidogrel. SWITCH-SWEDEHEART contributes its true information content rather than the inflated precision of its crude correlated counts. The consequences are concrete. A fixed-effect version of our  model, which assumes $\tau = 0$, gives apparently decisive results: ticagrelor versus clopidogrel HR `r hrs(FE$TC)`, prasugrel versus clopidogrel `r hrs(FE$PC)` and prasugrel versus ticagrelor `r hrs(FE$PT)`, all excluding 1. Once heterogeneity is acknowledged (@tbl-main), each of these intervals widens to include values close to no effect. The narrow intervals that support confident rankings are partly an artefact of understated uncertainty.
+
+**Second, full posterior distributions allow a more nuanced reading of the totality of the evidence.** A p-value or a SUCRA ranking compresses the evidence into a binary verdict or a rank order. SUCRA ignores the magnitude and variation in the differences and can rank first a treatment whose interval overlaps substantially with others [@RN1]. The posterior distribution from a Bayesian analysis instead permits answers to clinically relevant questions directly:
+
+- For ticagrelor versus clopidogrel, `r pc(M$TC$pr_rope)` of the posterior lies in the ROPE. This is not a failure to detect a difference but positive evidence that the two drugs are clinically interchangeable for MACE in the average trial population.
+- For prasugrel versus ticagrelor, the probability of meaningful MACE benefit is `r pc(M$PT$pr_clin_benefit)` and is more informative than  simply stating there is statistical significance (P < .05)[@RN1].
+- The `r pc(M$PC$pr_clin_benefit)` and `r pc(M$TC$pr_clin_benefit)` probabilities of meaningful MACE benefit for prasugrel and ticagrelor versus clopidogrel are a difference of degree, not the qualitative binary contrast implied by labelling one comparison significant and the other not.
+
+**Third, this nuanced view leaves a place for clopidogrel, especially in older patients and those at high bleeding risk** Clopidogrel is probably equivalent to ticagrelor for MACE with less bleeding. A possible efficacy gap with prasugrel exists (with a `r pc(M$PC$pr_clin_benefit)` probability of clinically meaningful benefit and a `r pc(M$PC$pr_rope)` probability of practical equivalence), but that gap must be weighed against a `r pc(B$PC$pr_clin_harm)` probability of meaningful excess bleeding. The balance depends on the patient's baseline risks. Using the posterior medians for illustration, at an annual MACE risk of 10% prasugrel would prevent about `r formatC(abs_mace, format = "f", digits = 1)` events per 100 patient-years compared with clopidogrel. It would cause about `r formatC(abs_bl3, format = "f", digits = 1)` additional major bleeds at a 3% annual bleeding risk, and about `r formatC(abs_bl8, format = "f", digits = 1)` at 8%, before accounting for the uncertainty around both estimates. Prasugrel is also contraindicated after stroke or transient ischaemic attack and requires dose reduction at age 75 years or older or body weight <60 kg [@triton2007]. In older patients, the two dedicated trials in our network found no ischaemic advantage of a potent agent over clopidogrel and, in POPular AGE, less bleeding with clopidogrel [@popularage2020; @elderlyacs2018]. For older and high-bleeding-risk patients, clopidogrel-based DAPT is therefore a rational choice that current guidelines may undervalue. A once-daily generic drug without the dyspnoea of ticagrelor, it may also favour adherence.
+
+## Limitations
+
+This is a trial-level analysis, so patient-level effect modifiers such as age, bleeding risk and region could not be modelled directly. Our statements about older and high-bleeding-risk patients rest on dedicated trials [@popularage2020; @elderlyacs2018] and on the balance of absolute risks, not on estimated interactions. Bleeding definitions differed across trials (@tbl-bleed), and SWITCH-SWEDEHEART used registry-based ICD-10 definitions [@switch2026]; the random-effects model absorbs, but does not remove, this heterogeneity. Several trials were open-label [@isarreact5; @prague18; @Tux; @switch2026; @cmaj; @popularage2020; @elderlyacs2018]. Incorporating SWITCH-SWEDEHEART required a conversion of its adjusted estimate to effective counts [@cochrane23]. The conversion is transparent and reproduces the published estimate, but results for bleeding are sensitive to this choice (SA9). The ROPE thresholds are a judgment [@kruschke2021], although the full posteriors allow any reader to apply their own. Finally, with only five direct prasugrel–ticagrelor trials, the heterogeneity measure $\tau$ for this comparison remains imprecisely estimated [@turner2012].
+
+## Conclusions
+
+After integrating the totality of evidence across `r K` RCTs and approximately `r cm(round(N_pat, -3))` patients, the honest summary, made explicit by a Bayesian workflow, is one of modest, uncertain and context-dependent treatment differences. One large direct trial provided clear evidence of prasugrel superiority over ticagrelor [@isarreact5], but the four other direct trials, including the large pragmatic SWITCH-SWEDEHEART, were inconclusive [@prague18; @reducemvi2020; @Tux; @switch2026]. When pooled with appropriate random-effects uncertainty and the indirect network evidence, which is shaped by the heterogeneous ticagrelor versus clopidogrel results, the Bayesian estimate is that prasugrel is probably better than ticagrelor for MACE. However, the probability of a clinically meaningful difference (HR <0.90) is only `r pc(M$PT$pr_clin_benefit)`, not strong enough to support a definitive hierarchy. Clinical decision-making should therefore be individualized: prasugrel is a reasonable preference in high-thrombotic-risk patients without contraindications, but a universal categorical recommendation, as previously suggested [@RN1], is not warranted. Perhaps the most important clinical conclusion of this analysis is that clopidogrel, arguably undervalued by guidelines anchored to a single global trial result [@plato2009] that has not been replicated in North American or dedicated regional RCTs [@cmaj], deserves reconsideration as a first-line option, particularly for older patients and those at elevated bleeding risk.
+
+# Funding
+
+This work was unfunded.
+
+# Disclosures
+
+The authors have no conflicts of interest to disclose. Given their role as Associate Editor, James M. Brophy had no involvement in the peer review of this article and has no access to information regarding its peer review.
+
+# Patient consent
+
+The authors confirm that patient consent is not applicable to this article. This is a meta-analysis of previously published, aggregate trial-level data; no individual patients were involved and no identifiable patient information is reported.
+
+# Ethics
+
+This is an analysis of previously published material; therefore, institutional ethics approval was not required.
+
+# Data availability
+
+All data are reported in the tables, and the full analysis code is available at https://github.com/brophyj/Bayesian-NMA.
+
+{{< pagebreak >}}
+
+# References
+
+::: {#refs}
+:::
+
+{{< pagebreak >}}
+
+# Tables
+
+```{r tbl-recon}
+#| label: tbl-recon
+#| tbl-colwidths: [26, 11, 11, 15, 15, 22]
+#| tbl-cap: "Trial reconciliation: trials included in our 2023 Bayesian NMA, the 2026 JAMA Cardiology NMA, and the present analysis."
+recon <- tribble(
+  ~Comparison, ~Trial, ~N, ~FU, ~K23, ~J26, ~Now,
+  "T vs C", "TREAT [@treat2019]",              3799,  "12m", "Yes", "No",  "Yes",
+  "T vs C", "Gasecka [@Gasecka]",              55,    "6m",  "Yes", "No",  "Yes",
+  "T vs C", "POPular AGE [@popularage2020]",   1002,  "12m", "Yes", "Yes", "Yes",
+  "T vs C", "PHILO [@philo2015]",              801,   "12m", "Yes", "Yes", "Yes",
+  "T vs C", "He [@he2021]",                    266,   "6m",  "Yes", "No",  "Yes",
+  "T vs C", "Mohareb [@mohareb2020]",          943,   "12m", "Yes", "No",  "Yes",
+  "T vs C", "TICAKOREA [@ticakorea2019]",      800,   "12m", "Yes", "Yes", "Yes",
+  "T vs C", "PLATO [@plato2009]",              18624, "12m", "Yes", "Yes", "Yes",
+  "T vs C", "Wu [@Wu]",                        350,   "12m", "Yes", "No",  "Yes",
+  "T vs C", "TC4 [@cmaj]",                     1005,  "12m", "No",  "No",  "Yes (new)",
+  "T vs C", "Tang 2016 [@tang2016]",           400,   "6m",  "No (RoB)", "Yes", "No (RoB)",
+  "T vs C", "Wang 2019 [@wang2016]",           298,   "6m",  "No (RoB)", "Yes", "No (RoB)",
+  "T vs C", "ALPHEUS [@alpheus2020]",          1883,  "1m",  "No", "Yes", "No (elective PCI; <6m)",
+  "T vs C", "DISPERSE-2 [@disperse2]",         990,   "3m",  "No", "Yes", "No (<6m; phase II)",
+  "P vs C", "TRILOGY ACS [@trilogyacs2012]",   9326,  "30m", "Yes", "No",  "Yes",
+  "P vs C", "PRASFIT-ACS [@prasfitacs2014]",   1363,  "12m", "Yes", "Yes", "Yes",
+  "P vs C", "Elderly ACS II [@elderlyacs2018]",1443,  "12m", "Yes", "Yes", "Yes",
+  "P vs C", "TRITON-TIMI 38 [@triton2007]",    13608, "15m", "Yes", "Yes", "Yes",
+  "P vs C", "Yabe [@yabe2022]",                76,    "12m", "Yes", "No",  "Yes",
+  "P vs C", "PRASFIT-Elective [@prasfitelective]", 742, "6m", "No", "Yes", "No (elective PCI)",
+  "P vs T", "PRAGUE-18 [@prague18]",           1230,  "12m", "Yes (1 y)", "Yes (1 mo)", "Yes (1 y)",
+  "P vs T", "ISAR-REACT 5 [@isarreact5]",      4018,  "12m", "Yes", "Yes", "Yes",
+  "P vs T", "REDUCE-MVI [@reducemvi2020]",     110,   "12m", "Yes", "No",  "Yes",
+  "P vs T", "TUXEDO-2 [@Tux]",                 1800,  "12m", "No",  "Yes", "Yes (new)",
+  "P vs T", "SWITCH-SWEDEHEART [@switch2026]", 17095, "12m", "No",  "No",  "Yes (new)"
+)
+comp_name <- c("T vs C" = "Ticagrelor vs clopidogrel",
+               "P vs C" = "Prasugrel vs clopidogrel",
+               "P vs T" = "Prasugrel vs ticagrelor")
+recon |>
+  mutate(N = cm(N)) |>
+  (\(d) { out <- list()
+    for (g in unique(d$Comparison)) {
+      sub <- filter(d, Comparison == g)
+      hdr <- sub[1, ]; hdr[1, ] <- ""; hdr$Trial <- paste0("**", comp_name[g], "**")
+      out <- c(out, list(hdr, sub)) }
+    select(bind_rows(out), -Comparison) })() |>
+  kable(col.names = c("Trial", "N", "Follow-up", "Kutcher 2023",
+                      "Maqsood 2026 (JAMA)", "This analysis"),
+        align = "lrllll")
+```
+
+C, clopidogrel; P, prasugrel; T, ticagrelor; RoB, risk of bias (high risk on RoB 2; see Supplemental Figure S2); PCI, percutaneous coronary intervention. TREAT (fibrinolysis-treated STEMI) and TRILOGY ACS (medically managed ACS) are excluded in the PCI-only sensitivity analysis (SA2).
+
+```{r tbl-mace}
+#| label: tbl-mace
+#| tbl-cap: "Trial-level MACE input data (all-cause death, non-fatal myocardial infarction, non-fatal stroke). For prasugrel versus ticagrelor trials, ticagrelor is the reference arm."
+cite_key <- c(
+  "TREAT" = "treat2019", "Gasecka" = "Gasecka", "POPular AGE" = "popularage2020",
+  "PHILO" = "philo2015", "He" = "he2021", "Mohareb" = "mohareb2020",
+  "TICAKOREA" = "ticakorea2019", "PLATO" = "plato2009", "Wu" = "Wu",
+  "TC4" = "cmaj", "TRILOGY ACS" = "trilogyacs2012",
+  "PRASFIT-ACS" = "prasfitacs2014", "Elderly ACS II" = "elderlyacs2018",
+  "TRITON-TIMI 38" = "triton2007", "Yabe" = "yabe2022",
+  "PRAGUE-18" = "prague18", "ISAR-REACT 5" = "isarreact5",
+  "REDUCE-MVI" = "reducemvi2020", "TUXEDO-2" = "Tux",
+  "SWITCH-SWEDEHEART" = "switch2026")
+mark <- c("TUXEDO-2" = "^a^", "PRAGUE-18" = "^b^", "TRILOGY ACS" = "^c^",
+          "SWITCH-SWEDEHEART" = "^d^")
+fu_lab <- function(t) paste0(round(12 * t), "m")
+comp_of <- function(df) df |>
+  group_by(study) |>
+  summarise(comp = paste(rev(treat), collapse = " vs "), .groups = "drop")
+
+comp_name <- c("T vs C" = "Ticagrelor vs clopidogrel (reference)",
+               "P vs C" = "Prasugrel vs clopidogrel (reference)",
+               "P vs T" = "Prasugrel vs ticagrelor (reference)")
+# insert a bold heading row before each comparison group, then drop the column
+add_groups <- function(df, grp = "Comparison") {
+  out <- list()
+  for (g in unique(df[[grp]])) {
+    sub <- df[df[[grp]] == g, , drop = FALSE]
+    hdr <- sub[1, , drop = FALSE]; hdr[1, ] <- ""
+    hdr[[2]] <- paste0("**", comp_name[g], "**")
+    out[[length(out) + 1]] <- hdr
+    out[[length(out) + 1]] <- sub
+  }
+  bind_rows(out)[, setdiff(names(df), grp)]
+}
+arm_table <- function(inp) {
+  inp |>
+    mutate(cell = glue("{r}/{cm(n)} ({formatC(100 * r / n, format = 'f', digits = 1)}%)")) |>
+    select(study, arm, treat, time_yr, cell) |>
+    pivot_wider(names_from = arm, values_from = c(treat, cell)) |>
+    left_join(comp_of(inp), by = "study") |>
+    mutate(
+      Trial = paste0(study, coalesce(mark[study], ""), " [@", cite_key[study], "]"),
+      comp  = factor(comp, levels = c("T vs C", "P vs C", "P vs T"))
+    ) |>
+    arrange(comp, study)
+}
+arm_table(inp_m) |>
+  transmute(Comparison = as.character(comp), Trial, `Follow-up` = fu_lab(time_yr),
+            `Reference, events/n (%)` = cell_1,
+            `Comparator, events/n (%)` = cell_2) |>
+  add_groups() |>
+  kable(align = "llrr")
+```
+
+^a^ TUXEDO-2: death, myocardial infarction or stroke was a secondary end point. ^b^ PRAGUE-18: 1-year outcomes (39% crossover to clopidogrel by 1 year). ^c^ TRILOGY ACS: 30-month follow-up, medically managed ACS without PCI. ^d^ SWITCH-SWEDEHEART: crude counts shown. The primary analysis used effective counts reproducing the cluster- and time-adjusted OR 0.90 (95% CI 0.77–1.06): `r ss_m$r0`/`r cm(ss_m$n0)` (ticagrelor) and `r ss_m$r1`/`r cm(ss_m$n1)` (prasugrel). Crude counts were used in SA9.
+
+```{r tbl-bleed}
+#| label: tbl-bleed
+#| tbl-cap: "Trial-level major bleeding input data. Bleeding definitions vary across trials."
+bdef <- c(
+  "TREAT" = "TIMI or PLATO major", "Gasecka" = "PLATO major",
+  "POPular AGE" = "TIMI major", "PHILO" = "PLATO major",
+  "He" = "BARC 1–5", "Mohareb" = "Major (unspecified)",
+  "TICAKOREA" = "PLATO major", "PLATO" = "PLATO major", "Wu" = "PLATO major",
+  "TC4" = "GI bleed or haemorrhagic stroke requiring admission^a^",
+  "TRILOGY ACS" = "TIMI major", "PRASFIT-ACS" = "TIMI major",
+  "Elderly ACS II" = "BARC 2 or 3", "TRITON-TIMI 38" = "TIMI major",
+  "Yabe" = "TIMI major", "PRAGUE-18" = "TIMI major (1 year)",
+  "ISAR-REACT 5" = "BARC 3–5", "REDUCE-MVI" = "BARC >2",
+  "TUXEDO-2" = "BARC 3a–5b",
+  "SWITCH-SWEDEHEART" = "Major bleeding, broad ICD-10 (registry)^b^")
+mark <- c(none = "")  # no superscripts on trial names in this table
+arm_table(inp_b) |>
+  transmute(Comparison = as.character(comp), Trial,
+            `Reference, events/n (%)` = cell_1,
+            `Comparator, events/n (%)` = cell_2,
+            Definition = bdef[study]) |>
+  add_groups() |>
+  kable(align = "lrrl")
+```
+
+^a^ TC4 used a narrower definition (hospital admission for gastrointestinal bleeding or haemorrhagic stroke). ^b^ SWITCH-SWEDEHEART: crude counts shown. The primary analysis used effective counts reproducing the adjusted OR 0.80 (95% CI 0.64–0.99): `r ss_b$r0`/`r cm(ss_b$n0)` (ticagrelor) and `r ss_b$r1`/`r cm(ss_b$n1)` (prasugrel). BARC, Bleeding Academic Research Consortium; TIMI, Thrombolysis in Myocardial Infarction; PLATO, Platelet Inhibition and Patient Outcomes.
+
+```{r tbl-main}
+#| label: tbl-main
+#| tbl-cap: "Main results of the Bayesian network meta-analysis (primary random-effects cloglog model)."
+lab <- c("T vs C" = "Ticagrelor vs clopidogrel",
+         "P vs C" = "Prasugrel vs clopidogrel",
+         "P vs T" = "Prasugrel vs ticagrelor")
+main |>
+  mutate(Outcome = if_else(out == "MACE", "MACE", "Major bleeding"),
+         Comparison = lab[comparison],
+         `HR (95% CrI)` = glue("{f2(median_HR)} ({f2(lo95_HR)}–{f2(hi95_HR)})"),
+         `Pr(HR < 0.90) benefit` = pc(pr_clin_benefit),
+         `Pr(0.90–1.11) equivalence` = pc(pr_rope),
+         `Pr(HR > 1.11) harm` = pc(pr_clin_harm)) |>
+  select(Outcome, Comparison, `HR (95% CrI)`, `Pr(HR < 0.90) benefit`,
+         `Pr(0.90–1.11) equivalence`, `Pr(HR > 1.11) harm`) |>
+  kable(align = "llcccc")
+```
+
+HR, hazard ratio from the complementary log-log model with log(time) offset; CrI, credible interval; ROPE, region of practical equivalence (HR 0.90–1.11). HR <1 favours the first-named drug. Probabilities are posterior probabilities of clinically meaningful benefit (HR <0.90), practical equivalence, and clinically meaningful harm (HR >1.11).
+
+{{< pagebreak >}}
+
+# Figures
+
+```{r fig-network}
+#| label: fig-network
+#| fig-cap: "Network of the 20 included trials. Node size is proportional to the number of patients randomized to each drug; edge width and labels show the number of direct randomized comparisons. All three pairwise comparisons have direct evidence."
+#| fig-width: 7
+#| fig-height: 6.5
+pts <- inp_m |>
+  mutate(drug = recode(treat, C = "Clopidogrel", T = "Ticagrelor", P = "Prasugrel")) |>
+  group_by(drug) |> summarise(n = sum(n), .groups = "drop")
+ntr <- comp_of(inp_m) |> count(comp)
+nodes <- tibble(drug = c("Prasugrel", "Clopidogrel", "Ticagrelor"),
+                x = c(0.18, 0.82, 0.18), y = c(0.85, 0.50, 0.15)) |>
+  left_join(pts, by = "drug") |>
+  mutate(size = rescale(sqrt(n), to = c(10, 18)))
+edges <- tibble(from = c("Prasugrel", "Clopidogrel", "Prasugrel"),
+                to   = c("Clopidogrel", "Ticagrelor", "Ticagrelor"),
+                comp = c("P vs C", "T vs C", "P vs T"),
+                lx = c(0.53, 0.53, 0.12), ly = c(0.71, 0.29, 0.50)) |>
+  left_join(ntr, by = "comp") |>
+  left_join(select(nodes, from = drug, x1 = x, y1 = y), by = "from") |>
+  left_join(select(nodes, to = drug, x2 = x, y2 = y), by = "to")
+p_net <- ggplot() +
+  geom_segment(data = edges, aes(x1, y1, xend = x2, yend = y2, linewidth = n),
+               colour = "grey55", lineend = "round", show.legend = FALSE) +
+  scale_linewidth(range = c(3, 7)) +
+  geom_label(data = edges, aes(lx, ly, label = paste(n, "trials")),
+             size = 4, fontface = "bold", colour = "#2C3E50",
+             label.size = 0, fill = "white") +
+  geom_point(data = nodes, aes(x, y, size = size), shape = 21,
+             fill = "#E8A020", colour = "#2C3E50", stroke = 1.5) +
+  scale_size_identity() +
+  geom_text(data = nodes, aes(x, y + c(0.085, 0.10, -0.10), label = drug),
+            fontface = "bold", size = 4.5, colour = "#2C3E50") +
+  geom_text(data = nodes, aes(x, y + c(0.14, 0.155, -0.155),
+                              label = paste0("n = ", cm(n))),
+            size = 3.6, colour = "grey35") +
+  coord_cartesian(xlim = c(-0.05, 1.05), ylim = c(-0.08, 1.12)) +
+  theme_void()
+ggsave(file.path(fig_dir, "Figure1_network.png"), p_net, width = 7,
+       height = 6.5, dpi = 300, bg = "white")
+ggsave(file.path(fig_dir, "Figure1_network.tiff"), p_net, width = 7,
+       height = 6.5, dpi = 300, bg = "white", compression = "lzw")
+p_net
+```
+
+```{r fig-forest}
+#| label: fig-forest
+#| fig-cap: "Posterior hazard ratios for MACE (top) and major bleeding (bottom). Points are posterior medians; thick and thin bars are 90% and 95% credible intervals. The shaded band is the region of practical equivalence (HR 0.90–1.11). Numbers at right give the posterior probabilities of clinically meaningful benefit (HR <0.90), practical equivalence and clinically meaningful harm (HR >1.11). HR <1 favours the first-named drug. C, clopidogrel; P, prasugrel; T, ticagrelor."
+#| fig-width: 8
+#| fig-height: 5.5
+fd <- main |>
+  mutate(Outcome = factor(if_else(out == "MACE", "MACE", "Major bleeding"),
+                          levels = c("MACE", "Major bleeding")),
+         comparison = factor(comparison, levels = rev(c("T vs C", "P vs C", "P vs T"))),
+         lab = glue("{f2(median_HR)} ({f2(lo95_HR)}–{f2(hi95_HR)})"),
+         prob = glue("{pc(pr_clin_benefit)} / {pc(pr_rope)} / {pc(pr_clin_harm)}"))
+p_for <- ggplot(fd, aes(y = comparison)) +
+  annotate("rect", xmin = 0.90, xmax = 1.11, ymin = -Inf, ymax = Inf,
+           fill = "#4393C3", alpha = 0.15) +
+  geom_vline(xintercept = 1, linetype = "dashed", colour = "grey40") +
+  geom_linerange(aes(xmin = lo95_HR, xmax = hi95_HR), linewidth = 0.7,
+                 colour = "#2C3E50") +
+  geom_linerange(aes(xmin = lo90_HR, xmax = hi90_HR), linewidth = 2.4,
+                 colour = "#2C3E50", alpha = 0.6) +
+  geom_point(aes(x = median_HR), size = 3.2, shape = 21, fill = "#E8A020",
+             colour = "#2C3E50") +
+  geom_text(aes(x = 1.85, label = lab), hjust = 0, size = 3.2) +
+  geom_text(aes(x = 2.55, label = prob), hjust = 0, size = 3.2) +
+  scale_x_log10(limits = c(0.55, 3.6),
+                breaks = c(0.6, 0.8, 0.9, 1, 1.11, 1.3, 1.6),
+                labels = c("0.60", "0.80", "0.90", "1.00", "1.11", "1.30", "1.60")) +
+  facet_wrap(~Outcome, ncol = 1) +
+  labs(x = "Hazard ratio (log scale)", y = NULL,
+       caption = "Right columns: HR (95% CrI) and Pr(benefit) / Pr(equivalence) / Pr(harm)") +
+  theme_bw(base_size = 11) +
+  theme(strip.text = element_text(face = "bold"), panel.grid.minor = element_blank())
+ggsave(file.path(fig_dir, "Figure2_forest.png"), p_for, width = 8,
+       height = 5.5, dpi = 300, bg = "white")
+ggsave(file.path(fig_dir, "Figure2_forest.tiff"), p_for, width = 8,
+       height = 5.5, dpi = 300, bg = "white", compression = "lzw")
+p_for
+```
+
+
+```{r central}
+#| fig-cap: "Central Illustration. Posterior probabilities from a random-effects Bayesian network meta-analysis of 20 randomized trials comparing clopidogrel, ticagrelor and prasugrel, each with aspirin, after acute coronary syndrome. Left, the evidence network (edge labels give the number of trials for each comparison). Centre, for each comparison and outcome, the probability that the first-named drug is meaningfully better (HR <0.90, blue), practically equivalent (HR 0.90 to 1.11, grey) or meaningfully worse (HR >1.11, red); for major bleeding, benefit denotes less bleeding. Right, the main clinical messages. HR, hazard ratio; MACE, major adverse cardiovascular events (all-cause death, myocardial infarction or stroke)."
+#| out-width: "100%"
+# Generated by central_illustration.R (re-run it after re-running the analysis)
+include_graphics(file.path(fig_dir, "Central_Illustration.png"))
+```
