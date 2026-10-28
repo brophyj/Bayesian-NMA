@@ -1,0 +1,24 @@
+Trial,Comparison,N,Followup,Kutcher23,JAMA26,Main,PCIonly,Note
+TREAT,T vs C,3799,12m,Yes,No,Yes,No,Non-PCI (fibrinolysis)
+Gasecka,T vs C,55,6m,Yes,No,Yes,Yes,0 MACE events
+POPular AGE,T vs C,1002,12m,Yes,Yes,Yes,Yes,
+PHILO,T vs C,801,12m,Yes,Yes,Yes,Yes,
+He,T vs C,266,6m,Yes,No,Yes,Yes,
+Mohareb,T vs C,943,12m,Yes,No,Yes,Yes,
+TICAKOREA,T vs C,800,12m,Yes,Yes,Yes,Yes,
+PLATO,T vs C,18624,12m,Yes,Yes,Yes,Yes,NA subgroup: no benefit
+Wu,T vs C,350,12m,Yes,No,Yes,Yes,0 MACE events
+TC4,T vs C,1005,12m,No,No,Yes ★,Yes,North American; cluster RCT; no COI
+TRILOGY ACS,P vs C,9326,30m,Yes,No,Yes,No,0% PCI; excluded PCI-only SA
+PRASFIT-ACS,P vs C,1363,12m,Yes,Yes,Yes,Yes,
+Elderly ACS II,P vs C,1443,12m,Yes,Yes,Yes,Yes,
+TRITON-TIMI 38,P vs C,13608,15m,Yes,Yes,Yes,Yes,
+Yabe,P vs C,76,12m,Yes,No,Yes,Yes,
+PRAGUE-18,P vs T,1230,12m,Yes (1yr),Yes (1mo),Yes (1yr),Yes,39% crossover to C — SA5
+ISAR-REACT 5,P vs T,4018,12m,Yes,Yes,Yes,Yes,
+REDUCE-MVI,P vs T,110,12m,Yes,No,Yes,Yes,Small STEMI trial
+TUXEDO-2,P vs T,1800,12m,No,Yes,Yes ★,Yes,DM+MVD; SA4
+SWITCH-SWEDEHEART,P vs T,17095,12m,No,No,Yes ★,Yes,"Stepped-wedge cluster RCT; adjusted OR as effective counts; SA8, SA9"
+Tang 2016,T vs C,400,6m,No (RoB),Yes,No,No,Excluded: some concerns RoB
+Wang 2016,T vs C,200,12m,No (RoB),Yes,No,No,Excluded: some concerns RoB
+ALPHEUS,T vs C,1883,1m,No (<6m),Yes,No,No,Excluded: 1-month follow-up

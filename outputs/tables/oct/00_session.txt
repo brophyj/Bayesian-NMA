@@ -1,0 +1,8 @@
+Date: 2026-10-18 11:38:06.760751
+R: R version 4.6.1 (2026-06-24)
+brms: 2.23.0
+cmdstanr: 0.9.0
+CmdStan: 2.39.0
+Seed: 20260529
+Trials (main): 20
+Patients (MACE): 77714

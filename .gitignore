@@ -1,0 +1,20 @@
+# Fitted models (large; recreated by dapt_bayesian_nma_oct2026.R)
+outputs/models/
+# Rendered documents and Quarto/knitr intermediates
+CJC/oct/*.html
+CJC/oct/*.pdf
+CJC/oct/*.docx
+!CJC/oct/reference_cjc.docx
+!CJC/oct/reference_cjc_supp.docx
+*_files/
+*_cache/
+.quarto/
+# Raw bibliographic database exports (licence)
+CJC/oct/embase.*
+CJC/oct/cochrane.csv
+# R / OS clutter
+.Rhistory
+.RData
+.Rproj.user/
+.DS_Store
+~$*

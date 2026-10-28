@@ -1,0 +1,300 @@
+
+DISCUSSION  (October 2026 revision: SWITCH-SWEDEHEART added)
+==========================================================================
+
+Comparison of Bayesian NMA (this analysis) with Maqsood et al. 2026 JAMA
+Cardiology frequentist NMA, and with our June 2026 (19-trial) analysis.
+
+--------------------------------------------------------------------------
+1. HEADLINE RESULTS COMPARED
+--------------------------------------------------------------------------
+
+Maqsood 2026 (frequentist NMA, 15 trials, n=48,904):
+  MACE:     Prasugrel vs clopidogrel OR 0.80 (95%CI 0.69-0.93) - significant
+            Ticagrelor vs clopidogrel OR 0.97 (95%CI 0.84-1.12) - non-significant
+            Prasugrel vs ticagrelor   OR 0.83 (95%CI 0.70-0.98) - significant
+  Bleeding: Ticagrelor vs clopidogrel OR 1.24 (95%CI 1.01-1.52) - significant
+  Conclusion: 'Prasugrel provided the optimal balance for efficacy and safety.'
+
+This Bayesian NMA (20 trials, n=77,714; primary cloglog RE model,
+SWITCH-SWEDEHEART entered at its adjusted estimate - see section 2):
+  MACE:     P vs C  HR 0.87 (95%CrI 0.77-1.01), Pr(benefit) 71%, Pr(ROPE) 29%
+            T vs C  HR 0.97 (95%CrI 0.83-1.14), Pr(benefit) 16%, Pr(ROPE) 80%
+            P vs T  HR 0.90 (95%CrI 0.76-1.10), Pr(benefit) 52%, Pr(ROPE) 46%
+  Bleeding: T vs C  HR 1.27 (95%CrI 1.04-1.61), Pr(harm) 90%
+            P vs C  HR 1.10 (95%CrI 0.89-1.34), Pr(harm) 45%
+            P vs T  HR 0.86 (95%CrI 0.69-1.07), Pr(benefit) 68%, Pr(ROPE) 31%
+  (Pr(benefit) = Pr(HR < 0.90); Pr(harm) = Pr(HR > 1.11);
+   ROPE = HR 0.90-1.11)
+
+--------------------------------------------------------------------------
+2. SWITCH-SWEDEHEART: WHAT IT ADDS AND HOW IT WAS INCORPORATED
+--------------------------------------------------------------------------
+
+SWITCH-SWEDEHEART (Omerovic 2026 NEJM) is a registry-based, open-label,
+stepped-wedge cluster-randomised trial comparing a default prasugrel
+with a default ticagrelor POLICY in 17,095 unselected Swedish ACS-PCI
+patients (mean age 70; 37% >=75 yr; patients on oral anticoagulation or
+with prior stroke retained). Seven regions grouped into 3 clusters
+switched from ticagrelor to prasugrel in random order over four 9-month
+periods. It is the largest P vs T trial, and adds 17,095 patients to the
+network (60,619 -> 77,714).
+
+Raw (crude) results:
+  MACE:     1113/9444 (11.8%) T policy vs 848/7651 (11.1%) P policy
+            RR 0.94 (95%CI 0.86-1.02); OR 0.93 (0.85-1.03)
+  Bleeding: 413/9444 (4.4%) vs 321/7651 (4.2%); OR 0.96 (0.83-1.11)
+Adjusted (trial's prespecified primary analysis):
+  MACE:     OR 0.90 (95%CI 0.77-1.06)
+  Bleeding: OR 0.80 (95%CI 0.64-0.99)
+
+Why the adjusted estimate is used in the primary analysis.
+  The crude comparison is not a valid randomised contrast in a
+  stepped-wedge trial. By design, every cluster starts on ticagrelor and
+  ends on prasugrel, so policy is confounded with calendar time: any
+  secular change in case-mix, PCI technique or registry coding over
+  2021-2025 appears as a treatment effect in a crude analysis.
+  Randomisation in this design protects only the ORDER in which clusters
+  switch, and the treatment effect is identified only after adjusting
+  for time. In addition, patients within a region share practice
+  patterns, so outcomes are correlated within clusters and a crude
+  binomial analysis that treats 17,095 patients as independent
+  overstates the precision (crude MACE log-OR SE 0.048 vs 0.082 implied
+  by the reported CI). The trial's primary model - a generalised linear
+  mixed model with a random intercept for cluster, a restricted cubic
+  spline for calendar time, prespecified baseline covariates and
+  multiple imputation - addresses both problems and is the estimate the
+  investigators designed the trial to report. Using crude counts would
+  both bias the estimate and give this trial roughly 2.8 times its
+  proper weight for MACE (1.9 times for bleeding).
+
+How the adjustment was carried into the NMA.
+  Our model is arm-based (binomial counts per arm), so the adjusted OR
+  cannot be entered directly. We therefore converted it into integer
+  'effective counts', a generalisation of the Cochrane Handbook
+  effective-sample-size method for cluster-randomised trials
+  (section 23.1.4): (i) the observed ticagrelor-arm risk (11.8% MACE,
+  4.4% bleeding) was kept; (ii) the prasugrel-arm risk was set so that
+  the odds ratio equals the adjusted OR; (iii) both arms were scaled by
+  a common factor, preserving the 9444:7651 allocation, so that the
+  binomial standard error of the log-OR equals that implied by the
+  published 95% CI. This gives MACE 399/3384 (T) vs 294/2742 (P),
+  reproducing OR 0.898 (0.766-1.054), and bleeding 212/4858 vs
+  139/3936, reproducing OR 0.802 (0.645-0.998). The implied design
+  effects are 2.8 (MACE) and 1.9 (bleeding). Because the arm risks are
+  around 11% and 4%, the cloglog HRs these counts imply (0.90 and 0.81)
+  are essentially the same as the ORs.
+
+Sensitivity to this choice (SA9, crude counts):
+  MACE P vs T:  HR 0.90 (0.76-1.10) adjusted -> 0.90 (0.77-1.09) crude;
+                Pr(benefit) 52% -> 48%
+  Bleed P vs T: HR 0.86 (0.69-1.07) adjusted -> 0.91 (0.71-1.11) crude;
+                Pr(benefit) 68% -> 47%
+  Bleed T vs C: HR 1.27 (1.04-1.61) adjusted -> 1.23 (1.01-1.56) crude
+  MACE T vs C and P vs C were essentially unchanged.
+  The choice matters little for MACE but materially for bleeding,
+  where the crude counts both dilute SWITCH-SWEDEHEART's prasugrel
+  advantage and over-weight it.
+
+Caveats (informed by the Supplementary Appendix, Tables S7-S9).
+  a) Robustness of the adjusted estimate. The trial's prespecified
+     sensitivity analyses (Table S9) give ORs of 0.82 to 0.94:
+       additional cluster-period random effect  0.90 (0.77-1.06)
+       alternative covariate set (adds OAC)     0.90 (0.77-1.06)
+       log link (risk ratio)                    0.91 (0.78-1.05)
+       time-varying policy effect (post hoc)    0.87 (0.73-1.03)
+       complete case                            0.94 (0.77-1.15)
+       fixed-effects (cluster) model            0.94 (0.85-1.05)
+       categorical time                         0.82 (0.70-0.96)
+       GEE (population-averaged)                0.88 (0.85-0.92)
+     The primary GLMM estimate sits in the middle of this range. With
+     only 3 clusters, the GEE interval is unreliable (the investigators
+     warn that sandwich variance estimates are too narrow) and the
+     categorical-time model cannot use periods 1 and 4, where policy and
+     period are fully aligned. Neither is a better choice than the
+     primary model. The crude counts used in SA9 (OR 0.93) are close to
+     the least favourable sensitivity estimates (0.94), so SA9 also
+     serves as a lower bound on the prasugrel effect from this trial.
+  b) Estimand. The adjusted OR is conditional on baseline covariates
+     and, being non-collapsible, could in principle differ from the
+     unadjusted (marginal) estimates of the other trials. The
+     covariate-adjusted risk ratio, which is collapsible, is
+     essentially the same (RR 0.91 vs OR 0.90), so this distinction
+     is negligible here.
+  c) Policy dilution. The estimand is a treatment POLICY effect. At
+     discharge, 63% of prasugrel-policy patients on a P2Y12 inhibitor
+     received prasugrel, 10% ticagrelor and 27% clopidogrel; in the
+     ticagrelor-policy group, 77% received ticagrelor and 22%
+     clopidogrel (Table S7). Because roughly a quarter of both groups
+     received clopidogrel and a tenth of the prasugrel group received
+     ticagrelor, the P vs T contrast is biased toward the null as an
+     estimate of the drug-versus-drug effect.
+  d) Outcomes are registry-ascertained (ICD-10) and not adjudicated,
+     and the broad ICD-10 bleeding definition differs from the
+     BARC/TIMI/PLATO definitions used in the other trials. The trial
+     reports no sensitivity analyses for bleeding, so the adjusted
+     bleeding OR (0.80) cannot be checked in the same way.
+
+Change from the June 19-trial analysis (June -> October, primary):
+  MACE P vs T:   HR 0.89 (0.73-1.12) -> 0.90 (0.76-1.10)
+                 Pr(benefit) 54% -> 52%; Pr(ROPE) 43% -> 46%
+  MACE P vs C:   HR 0.87 (0.76-1.03) -> 0.87 (0.77-1.01); Pr(benefit) 70% -> 71%
+  MACE T vs C:   HR 0.975 (0.82-1.18) -> 0.97 (0.83-1.14); Pr(ROPE) 76% -> 80%
+  Bleed P vs T:  HR 0.88 (0.67-1.14) -> 0.86 (0.69-1.07); Pr(benefit) 58% -> 68%
+  Bleed T vs C:  HR 1.26 (1.01-1.63) -> 1.27 (1.04-1.61); Pr(harm) 86% -> 90%
+SWITCH-SWEDEHEART narrowed the credible intervals without moving the
+MACE estimates; its main contribution is to strengthen the evidence
+that prasugrel causes less bleeding than ticagrelor. Excluding it (SA8)
+reproduces the June results.
+
+--------------------------------------------------------------------------
+3. METHODOLOGICAL ADVANTAGES OF THE BAYESIAN APPROACH
+--------------------------------------------------------------------------
+
+A. Uncertainty is quantified rather than dichotomised.
+   The frequentist approach forces a binary significant/non-significant
+   conclusion. Maqsood 2026 reports prasugrel vs clopidogrel as
+   'significant' (OR 0.80) and ticagrelor vs clopidogrel as
+   'non-significant' (OR 0.97), inviting the reader to treat these as
+   qualitatively different findings. The posterior distributions make
+   explicit that both estimates carry substantial uncertainty: the 71%
+   probability of clinically meaningful MACE benefit with prasugrel is
+   notable but far from certain, and the 16% probability with
+   ticagrelor, while lower, is not zero. Clinical decisions involve
+   weighing probabilities, not accepting binary verdicts.
+
+B. The ROPE framework acknowledges practical equivalence.
+   For MACE, 80% of the posterior for T vs C and 46% of the posterior
+   for P vs T lie within the ROPE [0.90, 1.11]. These probability
+   statements are more informative than declaring 'prasugrel is
+   superior' on the basis of p < 0.05.
+
+C. Between-study heterogeneity is modelled explicitly.
+   The between-study SD for T vs C is tau = 0.14 (95%CrI 0.02-0.37) for
+   MACE and 0.19 (0.04-0.43) for bleeding, with Pr(tau > 0.10) of 72%
+   and 85%. Heterogeneity of this size is clinically meaningful and is
+   consistent with the divergence between the PLATO global result
+   (HR 0.84), the PLATO North American subgroup (HR 1.25) and TC4
+   (RR 0.95). Ignoring it matters: a fixed-effect model gives T vs C
+   HR 0.92 (0.87-0.98), P vs C 0.85 (0.80-0.90) and P vs T 0.92
+   (0.86-0.99), all spuriously precise compared with the random-effects
+   estimates above.
+
+D. The time offset is correctly modelled.
+   The cloglog link with a log(time) offset places all trials on a
+   common hazard scale, accounting for TRILOGY ACS (30 months), TRITON
+   (15 months) and the 6-month trials. The JAMA 2026 analysis uses odds
+   ratios that ignore variation in follow-up duration. (SA1, a logit
+   model without offset, gives similar results: P vs C 0.85, P vs T
+   0.87.)
+
+E. Prior information is made explicit rather than hidden.
+   The weakly informative priors (normal(0, 0.5) on log-HR) encode only
+   that extreme effects (HR < 0.37 or > 2.7) are implausible. The TC4
+   trial (Kutcher 2025) used our 2023 BNMA as an explicit summary
+   prior, and the present analysis is itself a sequential update:
+   2023 BNMA -> June 2026 (+TC4, TUXEDO-2) -> October 2026
+   (+SWITCH-SWEDEHEART), each step shifting the conclusions only
+   modestly.
+
+F. Robustness.
+   Across SA1-SA9 the posterior medians are stable: T vs C 0.96-0.97,
+   P vs C 0.83-0.88, P vs T 0.87-0.90. No single trial or modelling
+   choice drives the MACE results. The largest shift comes from SA2
+   (PCI-only), where P vs C Pr(benefit) rises to 84%. For bleeding, the
+   handling of SWITCH-SWEDEHEART (SA9) is the most influential choice.
+
+G. Network consistency (P vs T).
+   Direct evidence (5 P vs T trials) gives HR 0.82 (95%CrI 0.66-1.03);
+   the indirect estimate via clopidogrel (P vs C and T vs C trials only)
+   gives HR 0.97 (0.73-1.34). The ratio of direct to indirect HRs is
+   approximately 0.85 (0.58-1.24): the direct trials favour prasugrel
+   somewhat more than the indirect route, but the difference is well
+   within uncertainty and gives no evidence of important inconsistency.
+
+--------------------------------------------------------------------------
+4. WHAT THE DATA SHOW AFTER ~78,000 PATIENTS
+--------------------------------------------------------------------------
+
+The best summary of 20 RCTs and 77,714 patients is one of modest,
+uncertain and context-dependent treatment differences, not the clear
+superiority of prasugrel claimed by Maqsood 2026.
+
+Ticagrelor vs clopidogrel (MACE):
+  The posterior is centred just below 1.0 (HR 0.97) with 80% of its mass
+  in the ROPE, a 16% probability of clinically meaningful benefit and a
+  5% probability of harm. Ticagrelor and clopidogrel produce similar
+  MACE outcomes in the average trial population. The North American
+  evidence (PLATO NA subgroup, TC4) shows no benefit, raising the
+  possibility that the pooled result reflects geographic heterogeneity
+  that may not apply to North American practice.
+
+Ticagrelor vs clopidogrel (bleeding):
+  This remains the clearest signal in the dataset: a 90% posterior
+  probability of clinically meaningful bleeding harm with ticagrelor
+  (HR 1.27, 95%CrI 1.04-1.61). The intracranial haemorrhage signal
+  reported by Maqsood 2026 (OR 1.89, 95%CI 1.08-3.33) is consistent.
+  Whatever the uncertain MACE benefit of ticagrelor, it comes at a real
+  cost in bleeding.
+
+Prasugrel vs clopidogrel (MACE):
+  A 71% probability of clinically meaningful MACE benefit
+  (HR 0.87, 95%CrI 0.77-1.01) is the strongest efficacy signal in the
+  network. The direct evidence comes mainly from TRITON-TIMI 38, with
+  further indirect support from the P vs T trials. Nevertheless 29% of
+  the posterior lies in the ROPE, so practical equivalence with
+  clopidogrel cannot be excluded, and the 45% probability of clinically
+  meaningful excess bleeding with prasugrel is a non-trivial safety
+  concern.
+
+Prasugrel vs ticagrelor (net clinical balance):
+  Both outcomes lean toward prasugrel: a 52% probability of clinically
+  meaningful MACE benefit and a 68% probability of clinically
+  meaningful bleeding reduction, with at most a 2% probability of
+  clinically meaningful harm on either. SWITCH-SWEDEHEART, the largest
+  P vs T trial, left the MACE comparison essentially unchanged and
+  strengthened the bleeding advantage. 'Probably no worse and possibly
+  modestly better' is the appropriate characterisation; 'definitively
+  superior' is not.
+
+--------------------------------------------------------------------------
+5. OVERALL CONCLUSION
+--------------------------------------------------------------------------
+
+After 20 RCTs and 77,714 randomised patients, including the large
+pragmatic SWITCH-SWEDEHEART trial, the Bayesian summary is that there
+is little to choose between the three P2Y12 inhibitors in terms of a
+definitive treatment hierarchy.
+
+Ticagrelor is the weakest performer: modest and uncertain MACE efficacy
+relative to clopidogrel combined with a clear bleeding penalty. It is
+difficult to recommend over clopidogrel outside specific circumstances,
+and it is probably no better than prasugrel for efficacy and probably
+worse for bleeding.
+
+Prasugrel has the strongest efficacy signal but a possible bleeding
+cost relative to clopidogrel. In patients at low bleeding risk
+(younger, no prior stroke, not on anticoagulation), prasugrel likely
+provides the best net clinical benefit. Its MACE advantage over
+ticagrelor is smaller and less certain than ISAR-REACT 5 alone
+suggested, but SWITCH-SWEDEHEART adds evidence that it causes less
+bleeding.
+
+Clopidogrel performs at least as well as ticagrelor on MACE with less
+bleeding, and its efficacy gap with prasugrel remains uncertain (the
+95%CrI for P vs C MACE crosses 1.0). In high bleeding-risk and North
+American patients in particular, where ticagrelor shows no consistent
+benefit, clopidogrel remains a reasonable first-line choice that
+current guidelines undervalue.
+
+The claim by Maqsood 2026 that 'prasugrel provided the optimal balance
+for efficacy and safety' is not wrong, but it overstates the certainty
+of the evidence. A more accurate summary: prasugrel is probably the
+most efficacious option for post-PCI patients without bleeding risk
+factors, ticagrelor offers uncertain and possibly geographically
+variable efficacy with a real bleeding cost, and clopidogrel remains a
+reasonable first-line choice, especially in older patients, those at
+high bleeding risk, and North American populations where the PLATO
+results have not been replicated.
+==========================================================================
+
